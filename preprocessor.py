@@ -136,7 +136,6 @@ def handle_directives(toks:Tokens):
         if toks[i] == "#":
             directive = toks.splice_until(i, "#END_DIRECTIVE")
             directive = Tokens(directive)
-            directive = replace_with_defined(directive)
             dbg(f"Found directive:")
             dbg(directive)
             handle_directive(directive)
@@ -199,7 +198,7 @@ def replace_with_defined(toks:Tokens):
     n = len(toks)
     while i < n:
         if toks[i] in DEFINITIONS:
-            toks = replace_index_with_defined(toks, index)
+            toks = replace_index_with_defined(toks, i)
             new_n = len(toks)
             i += new_n - n
             n = new_n
@@ -226,6 +225,7 @@ def handle_directive(directive):
     directive_type = get_directive_type(directive)
     match (directive_type):
         case "define":
+            directive = replace_with_defined(directive)
             if not DELETING:
                 handle_define(directive)
         case "undef":
@@ -239,13 +239,46 @@ def handle_directive(directive):
         case "ifndef":
             handle_ifndef(directive)
         case "if":
+            directive = handle_define_check(directive)
+            directive = replace_with_defined(directive)
             handle_if(directive)
         case "else":
             handle_else(directive)
         case "elif":
+            directive = handle_define_check(directive)
+            directive = replace_with_defined(directive)
             handle_elif(directive)
         case "endif":
             handle_endif(directive)
+
+
+def handle_define_check(directive):
+    """
+    """
+    directive.remove_all("#DEFINE_SPACE")
+    directive.remove_all("#END_DIRECTIVE")
+
+    dbg("Handling define checks")
+    dbg(directive)
+    i = 0
+    n = len(directive)
+    while i < n:
+        if directive[i] == "defined":
+            if i + 3 >= n or directive[i+1] != "(" or directive[i+3] != ")":
+                directive[i].fatal_error("Expected a check for definition")
+
+            if directive[i+2] in DEFINITIONS:
+                directive[i].token = "1"
+            else:
+                directive[i].token = "0"
+            del directive[i+1]
+            del directive[i+1]
+            del directive[i+1]
+            n -= 3
+        i += 1
+    dbg("After checking")
+    dbg(directive)
+    return directive
 
 
 def handle_define(directive):
@@ -444,10 +477,118 @@ def handle_endif(directive):
 
 
 def check_condition(condition):
+    """
+    +, -, /, *, %, 
+    ==, !=, <, >, <=, >=
+    &&, ||, !, 
+    &, |, ^, ~, <<, >>
+    """
     dbg(f"Checking condition:")
     dbg(condition)
-    # TODO
+    # TODO: Evaluate expression
+    condition = Tokens(condition)
+
+    # combine multi-token operators
+    condition.combine_all(["=", "="])
+    condition.combine_all(["!", "="])
+    condition.combine_all(["<", "="])
+    condition.combine_all([">", "="])
+    condition.combine_all(["&", "&"])
+    condition.combine_all(["|", "|"])
+    condition.combine_all(["<", "<"])
+    condition.combine_all([">", ">"])
+
+    # convert unary operators
+    i = 0
+    n = len(condition)
+    while i < n:
+        if condition[i] in ["!", "~"]:
+            condition.insert(i, string_to_token("0"))
+            i += 1
+            n += 1
+        i += 1
+
+    # convert to postfix
+    postfix_expression = convert_to_postfix(condition)
+    dbg(f"postfix expression: {postfix_expression}")
+
+
     return True
+
+
+def convert_to_postfix(infix):
+    # TODO: fix this. seems to give incorrect postfix expresssion
+    dbg(f"Converting {infix} to postfix")
+    result = []
+
+    operators = {
+        "!":(2, "right"),
+        "~":(2, "right"),
+
+        "*":(3, "left"),
+        "/":(3, "left"),
+        "%":(3, "left"),
+
+        "+":(4, "left"),
+        "-":(4, "left"),
+
+        "<<":(5, "left"),
+        ">>":(5, "left"),
+
+        "<":(6, "left"),
+        ">":(6, "left"),
+        "<=":(6, "left"),
+        ">=":(6, "left"),
+
+        "==":(7, "left"),
+        "!=":(7, "left"),
+
+        "&":(8, "left"),
+
+        "^":(9, "left"),
+
+        "|":(10, "left"),
+
+        "&&":(11, "left"),
+
+        "||":(12, "left"),
+    }
+
+    expression = []
+    op_stack = []
+
+    for x in infix:
+        # if x is an operand, put it in the expression
+        if x not in operators and x not in ["(", ")"]:
+            expression.append(x)
+        else:
+            # if (, push to stack
+            # if ), pop until (
+            if x == "(":
+                op_stack.append(x)
+            elif x == ")":
+                while 1:
+                    if len(op_stack) == 0:
+                        x.fatal_error("Unmatched )")
+                    if op_stack[-1] == "(":
+                        op_stack.pop()
+                        break
+                    else:
+                        expression.append(op_stack.pop())
+            else:
+                # if precedence of current operator is higher than on top of stack, stack is empty, or contains (, push to stack
+                if len(op_stack) == 0 or op_stack[-1] == "(" or operators[x][0] < operators[op_stack[-1]][0]:
+                    op_stack.append(x)
+                else:
+                    # else pop from stack while top of stack >= then push current to stack
+                    while len(op_stack) > 0 and op_stack[-1] != "(" and operators[op_stack[-1]][0] <= operators[x][0]:
+                        expression.append(op_stack.pop())
+                    op_stack.append(x)
+
+    while len(op_stack) > 0:
+        expression.append(op_stack.pop())
+
+    return expression
 
 
 def should_delete():
