@@ -1,6 +1,4 @@
 
-# TODO: fix conditional compilation bug in 6.c
-
 from debug import *
 from tokens import *
 
@@ -115,6 +113,10 @@ class FunctionMacro:
 
 
 DEFINITIONS = {}
+
+# TODO: add builtin definitions
+DEFINITIONS["__GLIBC_USE"] = FunctionMacro(Tokens(strings_to_tokens(["x"])), strings_to_tokens(["1"]), is_variadic=False)
+
 CONDITIONS = []
 DELETING = False
 
@@ -267,16 +269,27 @@ def handle_define_check(directive):
     while i < n:
         if directive[i] == "defined":
             if i + 3 >= n or directive[i+1] != "(" or directive[i+3] != ")":
-                directive[i].fatal_error("Expected a check for definition")
-
-            if directive[i+2] in DEFINITIONS:
-                directive[i].token = "1"
+                if i + 1 >= n:
+                    directive[i].fatal_error("Expected token after defined")
+                if directive[i+1] in DEFINITIONS:
+                    directive[i].token = "1"
+                    dbg("defined() = 1")
+                else:
+                    directive[i].token = "0"
+                    dbg("defined() = 0")
+                del directive[i+1]
+                n -= 1
             else:
-                directive[i].token = "0"
-            del directive[i+1]
-            del directive[i+1]
-            del directive[i+1]
-            n -= 3
+                if directive[i+2] in DEFINITIONS:
+                    directive[i].token = "1"
+                    dbg("defined() = 1")
+                else:
+                    directive[i].token = "0"
+                    dbg("defined() = 0")
+                del directive[i+1]
+                del directive[i+1]
+                del directive[i+1]
+                n -= 3
         i += 1
     dbg("After checking")
     dbg(directive)
@@ -304,7 +317,8 @@ def handle_define(directive):
 
     the_definition = directive[0]
     if len(directive) < 2:
-        directive[0].fatal_error("Expected definiton after define")
+        handle_normal_define(the_definition, [])
+        return
     dbg(f"DefName = {the_definition}")
 
     if directive[1] == "(":
@@ -393,8 +407,21 @@ def handle_undef(directive):
 
 def handle_include(directive):
     dbg("Handling include...")
+    dbg(directive)
     # TODO
-    # figure out if it is a local or library include
+    # figure out if it is a user or library include
+
+    
+
+def handle_user_include(filepath):
+    # check in current directory
+    # check in system directories
+    pass
+
+
+def handle_library_include(filepath):
+    # check in system directories
+    pass
 
 
 def handle_ifdef(directive:Tokens):
@@ -434,6 +461,7 @@ def handle_if(directive):
     condition = directive[2:]
     result = check_condition(condition)
     CONDITIONS.append(result)
+    dbg(f"if = {result}")
     should_delete()
 
 
@@ -487,7 +515,7 @@ def check_condition(condition):
     """
     dbg(f"Checking condition:")
     dbg(condition)
-    # TODO: Evaluate expression
+    # Evaluate expression
     condition = Tokens(condition)
 
     # combine multi-token operators
@@ -677,7 +705,7 @@ def should_delete():
     global DELETING
     DELETING = False
     for x in CONDITIONS:
-        if x == False:
+        if x is None or x == False:
             DELETING = True
     return DELETING
 
