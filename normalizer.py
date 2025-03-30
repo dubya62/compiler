@@ -67,17 +67,19 @@ def remove_comments(toks:Tokens):
                         multi_line = True
 
         elif toks[i] == '"':
-            if not quotes and not char_quote:
-                quotes = True
-            elif quotes and not char_quote:
-                if backslashes % 2 == 0:
-                    quotes = False
+            if not comment:
+                if not quotes and not char_quote:
+                    quotes = True
+                elif quotes and not char_quote:
+                    if backslashes % 2 == 0:
+                        quotes = False
         elif toks[i] == "'":
-            if not quotes and not char_quote:
-                char_quote = True
-            elif not quotes and char_quote:
-                if backslashes % 2 == 0:
-                    char_quote = False
+            if not comment:
+                if not quotes and not char_quote:
+                    char_quote = True
+                elif not quotes and char_quote:
+                    if backslashes % 2 == 0:
+                        char_quote = False
         elif toks[i] == '\n':
             # end a single-line comment if needed
             if comment and not multi_line and backslashes % 2 == 0:
@@ -85,7 +87,8 @@ def remove_comments(toks:Tokens):
             elif (quotes or char_quote) and i:
                 # throw error if reaching end of string
                 if backslashes % 2 == 0:
-                    toks[i].fatal_error("Unmatched '\"'.")
+                    if not comment:
+                        toks[i].fatal_error("Unmatched '\"'.")
                 else:
                     # act as if newline wasn't there if escaped
                     del toks[i]
