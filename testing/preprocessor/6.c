@@ -1,13 +1,10 @@
 
 #define DEBUG 6
 
-#if defined(DEBUGGING)
+#if defined(DEBUG)
     #define a 0
 #else
-    #define a 1
-#endif
-
-#if DEBUG || 6 << 2 + 3
+    #define a DEBUG
 #endif
 
 

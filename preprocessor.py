@@ -1,4 +1,6 @@
 
+# TODO: fix conditional compilation bug in 6.c
+
 from debug import *
 from tokens import *
 
@@ -512,12 +514,92 @@ def check_condition(condition):
     postfix_expression = convert_to_postfix(condition)
     dbg(f"postfix expression: {postfix_expression}")
 
+    # evaluate
+    dbg("Evaluating")
 
-    return True
+    operators = set(["+", "-", "/", "*", "%", "==", "!=", "<", ">", "<=", ">=", "&&", "||", "!", "&", "|", "^", "~", "<<", ">>"])
+
+    stack = []
+
+    for x in postfix_expression:
+        if x in operators:
+            if len(stack) < 2:
+                x.fatal_error("Expected 2 operands for operator")
+            second = stack.pop()
+            first = stack.pop()
+            # perform operation and push result to stack
+            intermediate = perform_operation(first, x, second)
+            stack.append(intermediate)
+        else:
+            try:
+                new_val = int(x.token)
+                if str(new_val) != x.token:
+                    x.fatal_error("Can only use ints and operators in condition")
+            except:
+                x.fatal_error("Can only use ints and operators in condition")
+
+            # push to stack
+            stack.append(new_val)
+
+    # final result should be an integer still on stack
+    if len(stack) != 1:
+        # hopefully impossible state
+        condition[0].fatal_error("Bad parse of conditional")
+
+    # pop result and return true/false
+    result = stack.pop()
+    dbg(f"result = {result}")
+    return result != 0
+
+
+def perform_operation(first:int, operator:str, second:int):
+    """
+    Perform a single operation given the operands and operator
+    """
+    match (operator):
+        case "+":
+            return first + second
+        case "-":
+            return first - second
+        case "/":
+            return int(first // second)
+        case "*":
+            return first * second
+        case "%":
+            return first % second
+        case "==":
+            return 1 if first == second else 0
+        case "!=":
+            return 1 if first != second else 0
+        case "<":
+            return 1 if first < second else 0
+        case ">":
+            return 1 if first > second else 0
+        case "<=":
+            return 1 if first <= second else 0
+        case ">=":
+            return 1 if first >= second else 0
+        case "&&":
+            return 1 if first != 0 and second != 0 else 0
+        case "||":
+            return 1 if first != 0 or second != 0 else 0
+        case "!":
+            return 1 if second == 0 else 0
+        case "&":
+            return first & second
+        case "|":
+            return first | second
+        case "^":
+            return first ^ second
+        case "~":
+            return ~second
+        case "<<":
+            return first << second
+        case ">>":
+            return first >> second
 
 
 def convert_to_postfix(infix):
-    # TODO: fix this. seems to give incorrect postfix expresssion
     dbg(f"Converting {infix} to postfix")
     result = []
 
