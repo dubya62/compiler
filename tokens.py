@@ -228,6 +228,10 @@ class Tokens:
         del self.tokens[index+1]
 
 
+    def index(self, value):
+        return self.tokens.index(value)
+
+
     def splice_until(self, index, end):
         """
         Remove tokens from index until (and including) the ending token

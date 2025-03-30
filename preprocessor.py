@@ -30,6 +30,88 @@ PREDEFINED:
     __STDC__
 """
 
+class FunctionMacro:
+    def __init__(self, args:Tokens, definition, is_variadic=False):
+        self.args = args
+        self.is_variadic = is_variadic
+        self.definition = definition
+
+    def get_replacement(self, args:Tokens):
+        dbg(f"Getting replacement for {args}")
+        result = Tokens([])
+
+        # throw error if not enough args supplied
+        if self.is_variadic:
+            if len(args) < len(self.args)-1:
+                self.definition[0].fatal_error("Too few args supplied to Macro")
+        else:
+            if len(args) > len(self.args):
+                self.definition[0].fatal_error("Too many args supplied to Macro")
+            elif len(args) < len(self.args):
+                self.definition[0].fatal_error("Too few args supplied to Macro")
+
+        for x in self.definition:
+            result.append(x)
+
+        # put the passed values into the definition
+        i = 0
+        n = len(result)
+        while i < n:
+            if result[i] == "__VA_ARGS__":
+                if not self.is_variadic:
+                    result[i].fatal_error("Cannot use __VA_ARGS__ in non-variadic function")
+                insertion = []
+                for j in range(len(self.args)-1, len(args)):
+                    insertion += args[j]
+                    if j < len(args)-1:
+                        new_tok = string_to_token(",")
+                        insertion.append(new_tok)
+                print(result[i])
+                del result[i]
+                result.insert_all(i, insertion)
+                i += len(insertion)
+                n = len(result)
+                continue
+            elif result[i] in self.args:
+                ind = self.args.index(result[i])
+                del result[i]
+                result.insert_all(i, args[ind])
+                i += len(args[ind])
+                n = len(result)
+                continue
+            i += 1
+
+        # perform stringizing
+        i = 0
+        n = len(result)
+        while i < n:
+            if result[i] == "#":
+                # next toke becomes string literal
+                if i + 1 >= n:
+                    result[i].fatal_error("Expected token to stringize after this")
+                del result[i]
+                n -= 1
+                result[i].token = f'"{result[i].token}"'
+            i += 1
+
+        # perform token pasting
+        i = 0
+        n = len(result)
+        while i < n:
+            if result[i] == "##":
+                del result[i]
+                i -= 1
+                n -= 1
+                if i + 1 >= n:
+                    result[i].fatal_error("Expected token to paste with after")
+                result[i].token += result[i+1].token
+                del result[i+1]
+                n -= 1
+            i += 1
+
+        return result
+
+
 DEFINITIONS = {}
 CONDITIONS = []
 DELETING = False
@@ -54,6 +136,7 @@ def handle_directives(toks:Tokens):
         if toks[i] == "#":
             directive = toks.splice_until(i, "#END_DIRECTIVE")
             directive = Tokens(directive)
+            directive = replace_with_defined(directive)
             dbg(f"Found directive:")
             dbg(directive)
             handle_directive(directive)
@@ -63,8 +146,64 @@ def handle_directives(toks:Tokens):
             del toks[i]
             i -= 1
             n -= 1
+        elif toks[i] in DEFINITIONS:
+            # replace with the definition
+            toks = replace_index_with_defined(toks, i)
+            new_n = len(toks)
+            i += new_n - n
+            n = new_n
         i += 1
 
+    return toks
+
+
+def replace_index_with_defined(toks:Tokens, index:int):
+    """
+    Use the definitions to replace tokens at specific index
+    """
+    # see if this should be function-like or normal
+    if toks[index] not in DEFINITIONS:
+        return toks
+
+    the_definition = DEFINITIONS[toks[index]]
+
+    if issubclass(type(the_definition), FunctionMacro):
+        dbg("Should be replaced with function macro")
+        if index + 1 >= len(toks) or toks[index+1] != "(":
+            return toks
+        arg_values = toks.get_match_content(index+1, ")")
+        if arg_values is None:
+            toks[index+1].fatal_error("Unmatched (")
+        arg_values = arg_values[1:-1]
+        arg_values = Tokens(arg_values).split_at(",")
+        dbg(f"Function args values: {arg_values}")
+        replacement = the_definition.get_replacement(arg_values)
+        dbg(f"Replacement = {replacement}")
+
+        del toks[index]
+        toks.insert_all(index, replacement)
+
+    else:
+        dbg("Should be replaced normally")
+        del toks[index]
+        toks.insert_all(index, the_definition)
+
+    return toks
+
+
+def replace_with_defined(toks:Tokens):
+    """
+    Use the definitions to replace tokens
+    """
+    i = 0
+    n = len(toks)
+    while i < n:
+        if toks[i] in DEFINITIONS:
+            toks = replace_index_with_defined(toks, index)
+            new_n = len(toks)
+            i += new_n - n
+            n = new_n
+        i += 1
     return toks
 
 
@@ -108,10 +247,101 @@ def handle_directive(directive):
         case "endif":
             handle_endif(directive)
 
+
 def handle_define(directive):
     dbg("Handling define...")
-    # TODO
+    if len(directive) > 0 and directive[-1] == "#END_DIRECTIVE":
+        del directive[-1]
+
     # figure out if a normal or function-like macro
+    # first, get first thing after the define and DEFINE_SPACE
+    while len(directive) > 0:
+        if directive[0] != "define":
+            del directive[0]
+        else:
+            define_token = directive[0]
+            del directive[0]
+            del directive[0]
+            break
+    # we should now be at the definition name
+    if len(directive) == 0:
+        define_token.fatal_error("Expected definition after define")
+
+    the_definition = directive[0]
+    if len(directive) < 2:
+        directive[0].fatal_error("Expected definiton after define")
+    dbg(f"DefName = {the_definition}")
+
+    if directive[1] == "(":
+        definition_type = "function"
+    else:
+        definition_type = "normal"
+
+    dbg(f"Definiton type is {definition_type}")
+    if definition_type == "normal":
+        # if normal, add to definitions
+        del directive[0]
+        del directive[0]
+        handle_normal_define(the_definition, directive)
+    else:
+        # if function-like, handle separately
+        del directive[0]
+        directive = Tokens(directive)
+        args = directive.get_match_content(0, ")")
+        if args is None:
+            directive[0].fatal_error("Unmatched (")
+        args = args[1:-1]
+
+        if len(directive) == 0 or directive[0] != "#DEFINE_SPACE":
+            the_definition.fatal_error("No definition")
+
+        del directive[0]
+
+        handle_function_define(the_definition, args, directive)
+
+
+def handle_normal_define(the_definition, directive):
+    dbg("Handling normal define:")
+    dbg(f"\tdefinition: {the_definition}")
+    dbg(f"\tdirective: {directive}")
+    if the_definition in DEFINITIONS:
+        the_definition.fatal_error(f"Redefinition of {the_definition}")
+    directive = [x for x in directive if x != "#DEFINE_SPACE"]
+    DEFINITIONS[the_definition] = Tokens(directive)
+
+
+def handle_function_define(the_definition, args, directive):
+    dbg("Handling function define:")
+    dbg(f"\tdefinition: {the_definition}")
+    dbg(f"\targs: {args}")
+    dbg(f"\tdirective: {directive}")
+    if the_definition in DEFINITIONS:
+        the_definition.fatal_error(f"Redefinition of {the_definition}")
+    directive = Tokens([x for x in directive if x != "#DEFINE_SPACE"])
+
+    args = Tokens(args)
+    args.combine_all([".", ".", "."])
+    args.remove_all("#DEFINE_SPACE")
+    args = args.split_at(",")
+    # combine ...
+    # combine ##
+    directive.combine_all(["#", "#"])
+
+    # throw error if ... exists and is not last arg
+    is_variadic = False
+    for i in range(len(args)):
+        if len(args[i]) == 0:
+            the_definition.fatal_error("Cannot define function-like macro with empty argument")
+        args[i] = args[i][0]
+        if args[i] == "...":
+            if i != len(args)-1:
+                args[i].fatal_error("... must be last argument")
+            is_variadic = True
+
+    # create FunctionMacro object
+    result = FunctionMacro(args, directive, is_variadic=is_variadic)
+
+    DEFINITIONS[the_definition] = result
 
 
 def handle_undef(directive):
