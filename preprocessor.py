@@ -2,6 +2,16 @@
 from debug import *
 from tokens import *
 
+import lexer
+import normalizer
+
+import os
+
+INCLUDED_ALREADY = set()
+
+USER_LIBS = set()
+LIBRARY_LIBS = set()
+
 """
 OPERATORS:
     # - Stringize
@@ -81,6 +91,9 @@ class FunctionMacro:
                 continue
             i += 1
 
+        result.remove_all("#DEFINE_SPACE")
+        result.remove_all("#END_DIRECTIVE")
+
         # perform stringizing
         i = 0
         n = len(result)
@@ -114,25 +127,47 @@ class FunctionMacro:
 
 DEFINITIONS = {}
 
-# TODO: add builtin definitions
-DEFINITIONS["__GLIBC_USE"] = FunctionMacro(Tokens(strings_to_tokens(["x"])), strings_to_tokens(["1"]), is_variadic=False)
+# add builtin definitions
+DEFINITIONS["__STDC__"] = strings_to_tokens(["1"])
+DEFINITIONS["__STDC_VERSION__"] = strings_to_tokens(["199901"])
+DEFINITIONS["__STDC_HOSTED__"] = strings_to_tokens(["0"])
+DEFINITIONS["__STDC_NO_ATOMICS__"] = strings_to_tokens(["1"])
+DEFINITIONS["__STDC_NO_THREADS__"] = strings_to_tokens(["1"])
+DEFINITIONS["__STDC_NO_VLA__"] = strings_to_tokens(["1"])
+DEFINITIONS["__linux__"] = strings_to_tokens(["1"])
+DEFINITIONS["__unix__"] = strings_to_tokens(["1"])
+DEFINITIONS["__x86_64__"] = strings_to_tokens(["1"])
+DEFINITIONS["__GNUC__"] = strings_to_tokens(["1"])
+DEFINITIONS["__clang__"] = strings_to_tokens(["1"])
+DEFINITIONS["__BYTE_ORDER__"] = strings_to_tokens(["__ORDER_LITTLE_ENDIAN__"])
+DEFINITIONS["__SIZEOF_INT__"] = strings_to_tokens(["4"])
+DEFINITIONS["__SIZEOF_LONG__"] = strings_to_tokens(["8"])
+DEFINITIONS["__SIZEOF_POINTER__"] = strings_to_tokens(["8"])
+DEFINITIONS["__CHAR_BIT__"] = strings_to_tokens(["8"])
+DEFINITIONS["__INT_MAX__"] = strings_to_tokens(["2147483647"])
+DEFINITIONS["__LONG_MAX__"] = strings_to_tokens(["9223372036854775807"])
+DEFINITIONS["__SIZE_MAX__"] = strings_to_tokens(["18446744073709551615"])
+DEFINITIONS["_FILE_OFFSET_BITS"] = strings_to_tokens(["18446744073709551615"])
+DEFINITIONS["__cplusplus"] = strings_to_tokens(["199711"])
+DEFINITIONS["_XOPEN_SOURCE"] = strings_to_tokens(["500"])
+
 
 CONDITIONS = []
 DELETING = False
 
-def preprocess(toks:Tokens):
+def preprocess(toks:Tokens, include_dirs=[]):
     """
     iterate through the file and handle a directive at a time
     """
     dbg("Handling Directives...")
-    toks = handle_directives(toks)
+    toks = handle_directives(toks, include_dirs=include_dirs)
 
     dbg("Finshed Preprocessing!")
     dbg(toks)
     return toks
 
 
-def handle_directives(toks:Tokens):
+def handle_directives(toks:Tokens, include_dirs=[]):
     i = 0
     n = len(toks)
 
@@ -142,7 +177,7 @@ def handle_directives(toks:Tokens):
             directive = Tokens(directive)
             dbg(f"Found directive:")
             dbg(directive)
-            handle_directive(directive)
+            handle_directive(directive, toks, i, include_dirs=include_dirs)
             n = len(toks)
             i -= 1
         elif DELETING:
@@ -153,7 +188,7 @@ def handle_directives(toks:Tokens):
             # replace with the definition
             toks = replace_index_with_defined(toks, i)
             new_n = len(toks)
-            i += new_n - n
+            i -= 1
             n = new_n
         i += 1
 
@@ -169,6 +204,7 @@ def replace_index_with_defined(toks:Tokens, index:int):
         return toks
 
     the_definition = DEFINITIONS[toks[index]]
+    print(f"{toks[index]} -> {the_definition}")
 
     if issubclass(type(the_definition), FunctionMacro):
         dbg("Should be replaced with function macro")
@@ -190,6 +226,8 @@ def replace_index_with_defined(toks:Tokens, index:int):
         dbg("Should be replaced normally")
         del toks[index]
         toks.insert_all(index, the_definition)
+    
+    dbg(toks)
 
     return toks
 
@@ -200,7 +238,9 @@ def replace_with_defined(toks:Tokens):
     """
     i = 0
     n = len(toks)
-    while i < n:
+    print(f"Replacing {toks} with defined")
+    print(DEFINITIONS)
+    while i < len(toks):
         if toks[i] in DEFINITIONS:
             toks = replace_index_with_defined(toks, i)
             new_n = len(toks)
@@ -213,7 +253,7 @@ def replace_with_defined(toks:Tokens):
 def get_directive_type(directive):
     if len(directive) <= 1:
         directive[0].fatal_error("Expected content in directive")
-    valid_types = set(["define", "undef", "include", "ifdef", "ifndef", "if", "else", "elif", "endif"])
+    valid_types = set(["define", "undef", "include", "ifdef", "ifndef", "if", "else", "elif", "endif", "error", "warning"])
 
     i = 1
     while i < len(directive):
@@ -225,11 +265,10 @@ def get_directive_type(directive):
         i += 1
 
 
-def handle_directive(directive):
+def handle_directive(directive, toks, index, include_dirs=[]):
     directive_type = get_directive_type(directive)
     match (directive_type):
         case "define":
-            directive = replace_with_defined(directive)
             if not DELETING:
                 handle_define(directive)
         case "undef":
@@ -237,7 +276,7 @@ def handle_directive(directive):
                 handle_undef(directive)
         case "include":
             if not DELETING:
-                handle_include(directive)
+                handle_include(directive, toks, index, include_dirs=include_dirs)
         case "ifdef":
             handle_ifdef(directive)
         case "ifndef":
@@ -254,6 +293,12 @@ def handle_directive(directive):
             handle_elif(directive)
         case "endif":
             handle_endif(directive)
+        case "error":
+            if not DELETING:
+                handle_error(directive)
+        case "warning":
+            if not DELETING:
+                handle_warning(directive)
 
 
 def handle_define_check(directive):
@@ -273,19 +318,19 @@ def handle_define_check(directive):
                     directive[i].fatal_error("Expected token after defined")
                 if directive[i+1] in DEFINITIONS:
                     directive[i].token = "1"
-                    dbg("defined() = 1")
+                    dbg(f"defined({directive[i+1]}) = 1")
                 else:
                     directive[i].token = "0"
-                    dbg("defined() = 0")
+                    dbg(f"defined({directive[i+1]}) = 0")
                 del directive[i+1]
                 n -= 1
             else:
                 if directive[i+2] in DEFINITIONS:
                     directive[i].token = "1"
-                    dbg("defined() = 1")
+                    dbg(f"defined({directive[i+2]}) = 1")
                 else:
                     directive[i].token = "0"
-                    dbg("defined() = 0")
+                    dbg(f"defined({directive[i+2]}) = 0")
                 del directive[i+1]
                 del directive[i+1]
                 del directive[i+1]
@@ -309,7 +354,8 @@ def handle_define(directive):
         else:
             define_token = directive[0]
             del directive[0]
-            del directive[0]
+            if directive[0] == "#DEFINE_SPACE":
+                del directive[0]
             break
     # we should now be at the definition name
     if len(directive) == 0:
@@ -326,25 +372,34 @@ def handle_define(directive):
     else:
         definition_type = "normal"
 
-    dbg(f"Definiton type is {definition_type}")
+    dbg(f"Definition type is {definition_type}")
     if definition_type == "normal":
         # if normal, add to definitions
         del directive[0]
-        del directive[0]
+        print(directive)
+
+        dbg("Replacing with defined")
+        dbg(directive)
+        directive = replace_with_defined(directive)
+
+        directive.remove_all("#DEFINE_SPACE")
+
         handle_normal_define(the_definition, directive)
     else:
         # if function-like, handle separately
         del directive[0]
         directive = Tokens(directive)
+        directive = replace_with_defined(directive)
         args = directive.get_match_content(0, ")")
         if args is None:
             directive[0].fatal_error("Unmatched (")
         args = args[1:-1]
 
-        if len(directive) == 0 or directive[0] != "#DEFINE_SPACE":
-            the_definition.fatal_error("No definition")
+        directive.remove_all("#DEFINE_SPACE")
 
-        del directive[0]
+        dbg(f"{args = }")
+        dbg(f"{directive = }")
+        
 
         handle_function_define(the_definition, args, directive)
 
@@ -380,7 +435,8 @@ def handle_function_define(the_definition, args, directive):
     is_variadic = False
     for i in range(len(args)):
         if len(args[i]) == 0:
-            the_definition.fatal_error("Cannot define function-like macro with empty argument")
+            #the_definition.fatal_error("Cannot define function-like macro with empty argument")
+            break
         args[i] = args[i][0]
         if args[i] == "...":
             if i != len(args)-1:
@@ -405,23 +461,52 @@ def handle_undef(directive):
         dbg(f"Removed definition of {definition}")
 
 
-def handle_include(directive):
+def handle_include(directive:Tokens, toks, index, include_dirs=[]):
     dbg("Handling include...")
     dbg(directive)
-    # TODO
     # figure out if it is a user or library include
+    directive.remove_all("#DEFINE_SPACE")
+    directive.remove_all("#END_DIRECTIVE")
+    while len(directive) > 0:
+        if directive[0] == "include":
+            include_word = directive[0]
+            del directive[0]
+            break
+        del directive[0]
 
+    if len(directive) == 0:
+        include_word.fatal_error("Expected filename after include")
+
+    if len(directive[0]) > 0 and directive[0][0] == '"':
+        lib_type = "local"
+    elif directive[0] == "<":
+        lib_type = "lib"
+    else:
+        directive[0].fatal_error("Excpected \" or < after include")
+
+    if lib_type == "lib" and directive[-1] != '>': 
+        directive[-1].fatal_error("Excpected > at end of library include")
+
+
+    if lib_type == "lib":
+        filepath = "".join([x.token for x in directive[1:-1]])
+        dbg(f"{filepath = }")
+        dbg("Library include...")
+        LIBRARY_LIBS.add(filepath)
+        """
+        result = handle_library_include(filepath, include_dirs=include_dirs)
+        toks.insert_all(index, result)
+        """
+    else:
+        filepath = directive[0].token.strip('"')
+        dbg(f"{filepath = }")
+        dbg("User include...")
+        USER_LIBS.add(filepath)
+        """
+        result = handle_user_include(filepath, include_dirs=include_dirs)
+        toks.insert_all(index, result)
+        """
     
-
-def handle_user_include(filepath):
-    # check in current directory
-    # check in system directories
-    pass
-
-
-def handle_library_include(filepath):
-    # check in system directories
-    pass
 
 
 def handle_ifdef(directive:Tokens):
@@ -545,7 +630,7 @@ def check_condition(condition):
     # evaluate
     dbg("Evaluating")
 
-    operators = set(["+", "-", "/", "*", "%", "==", "!=", "<", ">", "<=", ">=", "&&", "||", "!", "&", "|", "^", "~", "<<", ">>"])
+    operators = set(["+", "-", "/", "*", "%", "==", "!=", "<", ">", "<=", ">=", "&&", "||", "!", "&", "|", "^", "~", "<<", ">>", "?", ":"])
 
     stack = []
 
@@ -564,11 +649,12 @@ def check_condition(condition):
                 if str(new_val) != x.token:
                     x.fatal_error("Can only use ints and operators in condition")
             except:
-                x.fatal_error("Can only use ints and operators in condition")
+                new_val = 0
 
             # push to stack
             stack.append(new_val)
 
+    print(stack)
     # final result should be an integer still on stack
     if len(stack) != 1:
         # hopefully impossible state
@@ -625,6 +711,11 @@ def perform_operation(first:int, operator:str, second:int):
             return first << second
         case ">>":
             return first >> second
+        case "?":
+            return False if first == 0 else second
+        case ":":
+            return second if first == False else first
+
 
 
 def convert_to_postfix(infix):
@@ -662,6 +753,9 @@ def convert_to_postfix(infix):
         "&&":(11, "left"),
 
         "||":(12, "left"),
+
+        "?":(13, "left"),
+        ":":(13, "left"),
     }
 
     expression = []
@@ -708,4 +802,25 @@ def should_delete():
         if x is None or x == False:
             DELETING = True
     return DELETING
+
+
+def handle_error(directive):
+    directive.remove_all("#DEFINE_SPACE")
+    directive.remove_all("#END_DIRECTIVE")
+    if len(directive) < 2:
+        directive[0].fatal_error("Expected error message in error directive")
+
+    print("PREPROCESSOR ERROR:")
+    print("\t" + directive[2].token.strip('"'))
+    panic("Enountered Preprocessor error")
+
+def handle_warning(directive):
+    directive.remove_all("#DEFINE_SPACE")
+    directive.remove_all("#END_DIRECTIVE")
+    if len(directive) < 2:
+        directive[0].fatal_error("Expected warning message in warning directive")
+
+    print("PREPROCESSOR WARNING:")
+    print("\t" + directive[2].token.strip('"'))
+
 

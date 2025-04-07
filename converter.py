@@ -88,7 +88,6 @@ def break_operations_from_returns(toks:Tokens):
 
 def break_operations_from_function_calls(toks:Tokens):
     # store the variables of functions as we go
-    # TODO: throw an error if calling a function that does not exist
     # pull the values out of the function call
 
     functions = {}

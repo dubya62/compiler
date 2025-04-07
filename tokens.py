@@ -12,6 +12,7 @@ class Token:
         self.token = token
         self.filename = filename
         self.line_number = line_number
+        self.undefined = False
 
     def __len__(self):
         return len(self.token)

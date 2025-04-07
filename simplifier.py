@@ -17,23 +17,27 @@ def simplify(toks:Tokens):
     # TODO:
     toks = convert_structs_and_unions(toks)
 
-    # TODO: combine structs and pointers now
-
     # handle typedefs 
     toks = handle_typedefs(toks)
+
+    # combine structs and pointers now
+    toks = combine_structs_and_pointers(toks)
+
+    #  combine types and [int]
+    toks = combine_array_types(toks)
 
     # handle do-while loops (converting to a while loop)
     toks = handle_do_whiles(toks)
 
-    # handle compound literals
-    # TODO:
+    # TODO: handle compound literals
     dbg(toks)
+
+    # TODO: handle static and const
 
     # generalize variables, assigning each a type
     toks = handle_generalization(toks)
 
     # handle functions (converting functions into single #FUNC tokens)
-    # TODO: handle when multiple functions are named the same thing and multiple definitions/declarations
     toks = handle_functions(toks)
 
     dbg("Finished Simplification!")
@@ -118,6 +122,8 @@ def handle_primitive_types(toks:Tokens):
             "double",
             "signed",
             "unsigned",
+
+            "__builtin_va_list",
         ])
 
     while i < n:
@@ -154,7 +160,7 @@ def handle_pointer_types(toks:Tokens):
     while i < n:
         if toks[i] in ["#TYPE", "#ENUM", "#STRUCT", "#UNION"]:
             j = i + 1
-            while j < n and toks[j] == "*":
+            while j < n and toks[j] in ["*", "restrict"]:
                 toks[i].value.append(toks[j])
                 del toks[j]
                 n -= 1
@@ -196,7 +202,7 @@ def get_possible_names(toks:Tokens):
             ">", "<", ",", ".", "?", ":", "++", "--",
             "return", "break", "if", "else", "for",
             "while", "switch", "case", "default", "sizeof",
-            "continue", "static", "const", "goto", "do"
+            "continue", "static", "const", "goto", "do", "extern", "restrict"
         ])
 
     i = 0
@@ -250,6 +256,12 @@ def convert_structs_and_unions(toks:Tokens):
     return toks
 
 
+def get_definition(scopes, tok):
+    for scope in reversed(scopes):
+        if tok in scope:
+            return scope[tok]
+    return None
+
 def handle_typedefs(toks:Tokens):
     i = 0
     n = len(toks)
@@ -280,9 +292,13 @@ def handle_typedefs(toks:Tokens):
         elif toks[i] == "typedef":
             if i + 2 >= n:
                 toks[i].fatal_error("Expected type definition")
-            if toks[i+1] not in type_tokens:
+            if toks[i+1] not in type_tokens and not is_defined(toks[i+1]):
                 toks[i+1].fatal_error("Invalid type")
-            toks[i] = TypedefToken("#TYPEDEF", toks[i].filename, toks[i].line_number, toks[i+1], toks[i+2])
+            
+            if is_defined(toks[i+1]):
+                toks[i] = TypedefToken("#TYPEDEF", toks[i].filename, toks[i].line_number, get_definition(scopes, toks[i+1]).original_value , toks[i+2])
+            else:
+                toks[i] = TypedefToken("#TYPEDEF", toks[i].filename, toks[i].line_number, toks[i+1], toks[i+2])
 
             if is_defined(toks[i+2]):
                 toks[i+2].fatal_error("Multiple definitions of type")
@@ -321,7 +337,7 @@ def handle_functions(toks:Tokens):
             "<", ",", ".", "?", ":", "++", "--",
             "return", "break", "if", "else", "for",
             "while", "switch", "case", "default", "sizeof",
-            "continue", "static", "const", "goto", "do"
+            "continue", "static", "const", "goto", "do", "extern"
         ])
 
     i = 0
@@ -426,7 +442,7 @@ def add_extra_scopes(toks:Tokens):
             ">", "<", ",", ".", "?", ":", "++", "--",
             "return", "break", "if", "else", "for",
             "while", "switch", "case", "default", "sizeof",
-            "continue", "static", "const", "goto", "do"
+            "continue", "static", "const", "goto", "do", "extern", "restrict"
         ])
 
     i = 0
@@ -482,7 +498,7 @@ def handle_generalization(toks:Tokens):
             ">", "<", ",", ".", "?", ":", "++", "--",
             "return", "break", "if", "else", "for",
             "while", "switch", "case", "default", "sizeof",
-            "continue", "static", "const", "goto", "do"
+            "continue", "static", "const", "goto", "do", "extern", "restrict"
         ])
 
     scopes = [{}]
@@ -504,7 +520,7 @@ def handle_generalization(toks:Tokens):
             if len(scopes) == 0:
                 toks[i].fatal_error("Unmatched }")
             scopes.pop()
-        elif toks[i] not in builtins and toks[i] != TOKEN_LITERAL() and TOKEN_VARIABLE != toks[i]:
+        elif toks[i] not in builtins and TOKEN_LITERAL() != toks[i] and TOKEN_VARIABLE() != toks[i]:
             """
             if this is a function, do not throw a redefinition error.
             pretend there is a new scope 
@@ -581,7 +597,8 @@ def handle_generalization(toks:Tokens):
                     continue
 
                 if i == 0 or (toks[i-1] not in type_tokens and toks[i-1] != "."):
-                    toks[i].fatal_error(f"Undefined identifier {toks[i]}")
+                    #toks[i].fatal_error(f"Undefined identifier {toks[i]}")
+                    toks[i].undefined = True
                 # add it to the current scope
                 new_tok = VariableToken(f"#{toks.varnum}", toks[i].filename, toks[i].line_number, toks[i].token, the_type=toks[i-1])
                 toks[i] = new_tok
@@ -600,4 +617,33 @@ def handle_generalization(toks:Tokens):
 
 
 
+def combine_structs_and_pointers(toks):
+    i = 0
+    n = len(toks)
+    while i < n:
+        if toks[i] == "#STRUCT" or toks[i] == "#UNION":
+            while i + 1 < n and toks[i+1] in ["*", "restrict"]:
+                toks[i].value.append(toks[i+1])
+                del toks[i+1]
+                n -= 1
+        i += 1
+
+    return toks
+
+
+def combine_array_types(toks):
+    i = 0
+    n = len(toks)
+    while i < n:
+        if toks[i] in ["#STRUCT", "#ENUM", "#TYPE", "#UNION"]:
+            if i + 3 < n and toks[i+1] == "[" and toks[i+3] == "]" and TOKEN_INTEGER() == toks[i+2]:
+                toks[i].value.append(toks[i+1:i+4])
+                del toks[i+1]
+                del toks[i+1]
+                del toks[i+1]
+                n -= 3
+                i -= 1
+        i += 1
+
+    return toks
 

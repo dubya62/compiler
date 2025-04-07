@@ -9,7 +9,7 @@ def convert(toks:Tokens):
         &, *, -, +, =, [, ], |, /,
         >, <, ,, ., ?, :, ++, --,
         return, if, else
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
 
     """
@@ -23,7 +23,7 @@ def convert(toks:Tokens):
         >>, <<, >>=, <<=, ->, !=, ==, +=, /=, *=, %=, ^=, ~=, -=, &=, |=,
         &&=, ||=, <=, >=, &&, ||
         return, if, else
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
 
     """
@@ -42,7 +42,7 @@ def convert(toks:Tokens):
         >>, <<, ->, !=, ==,
         <=, >=, &&, ||
         return, if, else
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
 
     """
@@ -59,7 +59,7 @@ def convert(toks:Tokens):
         >>, <<, ->, !=, ==,
         <=, >=, &&, ||
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -78,7 +78,7 @@ def convert(toks:Tokens):
         <=, >=, &&, ||,
         un+, un-
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -97,7 +97,7 @@ def convert(toks:Tokens):
         <=, >=, &&, ||,
         un+, un-
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -112,7 +112,7 @@ def convert(toks:Tokens):
         <=, >=, &&, ||,
         un+, un-
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -128,7 +128,7 @@ def convert(toks:Tokens):
         >>, <<, ->, !=, ==,
         <=, >=, &&, ||,
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -145,7 +145,7 @@ def convert(toks:Tokens):
         >>, <<, ->, !=, ==,
         <=, >=, &&, ||,
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -161,12 +161,12 @@ def convert(toks:Tokens):
         >>, <<, ->, !=, ==,
         <=, >=, &&,
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
     # TODO: ensure && only evaluates rest of line if first part is true
-    # TODO: convert && to ifs
+    # convert && to ifs
     toks = convert_logical_and(toks)
     """
     Removed:
@@ -178,7 +178,7 @@ def convert(toks:Tokens):
         >>, <<, ->, !=, ==,
         <=, >=,
         return, if, else, cast
-        sizeof, static, const, goto
+        sizeof,  goto
         #{varnum}, @{labelnum}
     """
 
@@ -189,12 +189,65 @@ def convert(toks:Tokens):
 
     # remove ->
     toks = remove_arrow(toks)
+    """
+    Removed:
+        ->
+    Valid Tokens:
+        ;, {, }, (, ), bitnot, lognot, ref, deref, %, ^,
+        &, *, -, +, =, |, /,
+        >, <, ,, ., ?, :
+        >>, <<, !=, ==,
+        <=, >=,
+        return, if, else, cast
+        sizeof,  goto
+        #{varnum}, @{labelnum}
+    """
 
-    # TODO: remove <=, >=, and !=
+    # remove <=, >=, and !=
+    toks = remove_or_equal(toks)
+    """
+    Removed:
+        <=, >=, !=
+    Valid Tokens:
+        ;, {, }, (, ), bitnot, lognot, ref, deref, %, ^,
+        &, *, -, +, =, |, /,
+        >, <, ,, ., ?, :
+        >>, <<, ==,
+        return, if, else, cast
+        sizeof,  goto
+        #{varnum}, @{labelnum}
+    """
 
-    # TODO: remove lognot
+    # remove lognot
+    toks = remove_lognot(toks)
+    """
+    Removed:
+        lognot
+    Valid Tokens:
+        ;, {, }, (, ), bitnot, ref, deref, %, ^,
+        &, *, -, +, =, |, /,
+        >, <, ,, ., ?, :
+        >>, <<, ==,
+        return, if, else, cast
+        sizeof,  goto
+        #{varnum}, @{labelnum}
+    """
 
-    # TODO: convert derefs to accesses
+    # convert derefs to accesses
+    toks = convert_derefs(toks)
+    """
+    Removed:
+        deref
+    Valid Tokens:
+        ;, {, }, (, ), bitnot, ref, %, ^,
+        &, *, -, +, =, |, /,
+        >, <, ,, ., ?, :
+        >>, <<, ==,
+        access, call
+        return, if, else, cast
+        sizeof,  goto
+        #{varnum}, @{labelnum}
+    """
 
     dbg("Finished Operator Conversion!")
     dbg(toks)
@@ -722,10 +775,10 @@ def convert_logical_and(toks:Tokens):
     """
     x = a && b
     =>
-    #{newvar} = 0
+    #{newvar} = 0;
     if (a){
         if (b){
-            #{newvar} = 1
+            #{newvar} = 1;
         }
     }
     x = #{newvar}
@@ -743,7 +796,26 @@ def convert_logical_and(toks:Tokens):
         n = len(func)
         while i < n:
             if func[i] == "&&":
-                pass
+                new_var = VariableToken(f"#{toks.varnum}", "", 0, string_to_token(""), string_to_token(""))
+                before = [new_var, "=", "0", ";", "if", "("]
+                middle = [")", "{", "if", "("]
+                after = [")", "{", new_var, "=", "1", ";", "}", "else", "{", "}", "}", "else", "{", "}"]
+                toks.varnum += 1
+
+                start = func.get_line_start(i)
+                left = func[i-1]
+                right = func[i+1]
+                del func[i-1]
+                del func[i-1]
+                del func[i-1]
+                i -= 1
+                func.insert(i, new_var)
+                insertion = before + [left] + middle + [right] + after
+
+                func.insert_all(start, strings_to_tokens(insertion))
+                i += len(insertion)
+
+                n = len(func)
             i += 1
     return toks
 
@@ -783,4 +855,124 @@ def remove_arrow(toks:Tokens):
 
 
 
+def remove_or_equal(toks:Tokens):
+    """
+    a >= b
+    =>
+    !(a < b)
+
+    a <= b
+    =>
+    !(a > b)
+
+    a != b
+    =>
+    !(a == b)
+    """
+    for tok in toks:
+        if tok != "#FUNC":
+            continue
+
+        func:Tokens = tok.value
+
+        if func is None:
+            continue
+
+        i = 0
+        n = len(func)
+        while i < n:
+            if func[i] in [">=", "<="]:
+                func.insert_all(i-1, strings_to_tokens(["0", "lognot", "("]))
+                i += 3
+                if func[i][0] == ">":
+                    func[i].token = "<"
+                else:
+                    func[i].token = ">"
+                func.insert(i+2, string_to_token(")"))
+                n += 4
+
+            elif func[i] == "!=":
+                func.insert_all(i-1, strings_to_tokens(["0", "lognot", "("]))
+                i += 3
+                func[i].token = "=="
+                func.insert(i+2, string_to_token(")"))
+                n += 4
+
+            i += 1
+
+    toks = break_operations(toks)
+
+    return toks
+
+
+def convert_derefs(toks):
+    """
+    0 deref a
+    =>
+    a access 0
+    """
+    for tok in toks:
+        if tok != "#FUNC":
+            continue
+
+        func:Tokens = tok.value
+
+        if func is None:
+            continue
+
+        i = 0
+        n = len(func)
+        while i < n:
+            if func[i] == "deref":
+                func[i].token = "access"
+                temp = func[i+1]
+                func[i+1] = func[i-1]
+                func[i-1] = temp
+            i += 1
+
+    return toks
+
+
+
+def remove_lognot(toks:Tokens):
+    """
+    x = 0 lognot a
+    =>
+    #{newvar} = 0
+    if (a){
+        #{newvar} = 1
+    } else {}
+    x = #{newvar}
+    """
+    for tok in toks:
+        if tok != "#FUNC":
+            continue
+
+        func:Tokens = tok.value
+
+        if func is None:
+            continue
+
+        i = 0
+        n = len(func)
+        while i < n:
+            if func[i] == "lognot":
+                new_var = VariableToken(f"#{toks.varnum}", "", 0, string_to_token(""), string_to_token(""))
+                original = func[i+1]
+                insertion = [new_var, "=", "0", ";", "if", "(", original, ")", "{", new_var, "=", "1", ";", "}", "else", "{", "}"]
+
+                del func[i-1]
+                del func[i-1]
+                del func[i-1]
+                i -= 1
+                func.insert(i, new_var)
+                i -= 1
+
+                start = func.get_line_start(i)
+                func.insert_all(start, strings_to_tokens(insertion))
+
+                toks.varnum += 1
+                n = len(func)
+            i += 1
+    return toks
 

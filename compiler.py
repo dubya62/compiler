@@ -55,7 +55,7 @@ class Compiler:
 
         dbg("++++++++++++++++++++++++++++++++++++++++++++++++++")
         dbg("Performing Preprocessing")
-        toks:Tokens = preprocessor.preprocess(toks)
+        toks:Tokens = preprocessor.preprocess(toks, include_dirs=self.include_dirs)
 
         dbg("++++++++++++++++++++++++++++++++++++++++++++++++++")
         dbg("Performing Simplification")

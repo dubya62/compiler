@@ -7,10 +7,6 @@ def normalize(toks:Tokens):
     dbg("Removing Comments from tokens...")
     toks = remove_comments(toks)
 
-    # manage compiler directive syntax
-    dbg("Managing the preprocessor directive syntax...")
-    toks = manage_directive_syntax(toks)
-
     # combine strings into single tokens
     dbg("Combining Strings into single tokens...")
     toks = combine_strings(toks)
@@ -18,6 +14,13 @@ def normalize(toks:Tokens):
     # combine floats into single tokens
     dbg("Combining Floats into single tokens...")
     toks = combine_floats(toks)
+
+    dbg("Converting special integer literals")
+    toks = convert_special_integers(toks)
+    
+    # manage compiler directive syntax
+    dbg("Managing the preprocessor directive syntax...")
+    toks = manage_directive_syntax(toks)
 
     # remove whitespace
     dbg("Removing all whitespace...")
@@ -217,5 +220,38 @@ def remove_whitespace(toks:Tokens):
 def remove_auto_and_register(toks:Tokens):
     toks.remove_all("auto")
     toks.remove_all("register")
+    return toks
+
+
+def convert_special_integers(toks:Tokens):
+    """
+    052 = octal
+    0x2a = hex
+    0X2A = hex
+    0b10101 = binary
+    0B10101 = binary
+    """
+    i = 0
+    n = len(toks)
+    while i < n:
+        num_type = 10
+        if len(toks[i]) > 0 and toks[i][0] == "0":
+            if len(toks[i]) > 1:
+                if toks[i][2] in ["x", "X"]:
+                    num_type = 16
+                elif toks[i][2] in ["b", "B"]:
+                    num_type = 2
+                else:
+                    num_type = 8
+
+        if len(toks[i]) > 0 and toks[i][0] in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+            while len(toks[i]) > 0:
+                if toks[i][-1] in ["u", "U", "L", "l"]:
+                    toks[i].token = toks[i].token[:-1]
+                else:
+                    break
+        
+        i += 1
+
     return toks
 

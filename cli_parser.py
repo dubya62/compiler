@@ -38,7 +38,7 @@ def parse(args):
             action="append",
             type=str,
             help="Directories to search for headers",
-            default=["."]
+            default=[]
             )
 
 
