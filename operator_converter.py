@@ -448,9 +448,10 @@ def convert_calls_and_accesses(toks:Tokens):
         n = len(func)
         while i < n:
             if TOKEN_VARIABLE() == func[i] and i + 1 < n and func[i+1] == "(":
-                # this is a call
-                func.insert(i+1, string_to_token("call"))
-                n += 1
+                end_call = func.get_match_end(i+1, ")")
+                func[i] = FunctionCall(func[i:end_call+1])
+                func.tokens = func.tokens[:i+1] + func[end_call+1:]
+                n = len(func)
             i += 1
 
     return toks
