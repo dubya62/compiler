@@ -234,6 +234,8 @@ def convert_enums(toks:Tokens):
                     toks[i].fatal_error("Unmatched {")
                 n = len(toks)
 
+                toks[i].original_value = contents[:]
+
                 # TODO: parse the contents
         i += 1
 
@@ -252,6 +254,7 @@ def convert_structs_and_unions(toks:Tokens):
                 if contents is None:
                     toks[i].fatal_error("Unmatched {")
                 n = len(toks)
+                toks[i].original_value = contents[:]
         i += 1
     return toks
 
