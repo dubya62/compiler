@@ -37,6 +37,7 @@ def simplify(toks:Tokens):
     # generalize variables, assigning each a type
     toks = handle_generalization(toks)
 
+    dbg(toks)
     # handle functions (converting functions into single #FUNC tokens)
     toks = handle_functions(toks)
 
