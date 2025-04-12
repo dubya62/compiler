@@ -451,6 +451,7 @@ def convert_calls_and_accesses(toks:Tokens):
                 end_call = func.get_match_end(i+1, ")")
                 func[i] = FunctionCall(func[i:end_call+1])
                 func.tokens = func.tokens[:i+1] + func[end_call+1:]
+                func.insert(i+1, string_to_token(";"))
                 n = len(func)
             i += 1
 
