@@ -586,3 +586,13 @@ class FunctionCall(Token):
         self.value = value
 
 
+class TypeHandler(Token):
+    """
+    Special Token that holds all types for global usage
+    """
+    def __init__(self, value):
+        Token.__init__(self, "#TYPEHANDLER", "", 0)
+        self.value = value
+
+
+
