@@ -297,6 +297,17 @@ class Tokens:
             result -= 1
         return result + 1
 
+
+    def get_line_end(self, index):
+        """
+        get the index of the last token of this line
+        """
+        result = index
+        while result < len(self.tokens):
+            if self.tokens[result] == ";":
+                return result
+            result += 1
+        return result - 1
     
     def find_next(self, index, closer):
         """
