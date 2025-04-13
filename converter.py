@@ -241,7 +241,7 @@ def break_operations_from_ifs(toks:Tokens):
                 if content is None:
                     func[i+1].fatal_error("Unmatched (")
 
-                the_variable = VariableToken(f"#{toks.varnum}", func[i].filename, func[i].line_number, "inner_if", TypeToken("#TYPE", func[i].filename, func[i].line_number, Token("int", "", 0)))
+                the_variable = VariableToken(f"#{toks.varnum}", func[i].filename, func[i].line_number, "inner_if", TypeToken("#TYPE", func[i].filename, func[i].line_number, [Token("int", "", 0)]))
                 insertion = strings_to_tokens([the_variable, "="] + content[1:-1] + [";"])
                 insertion2 = strings_to_tokens(["(", the_variable, ")"])
                 func.insert_all(i+1, insertion2)
