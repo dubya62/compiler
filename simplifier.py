@@ -34,10 +34,12 @@ def simplify(toks:Tokens):
 
     # TODO: handle static and const
 
+    dbg(toks)
     # generalize variables, assigning each a type
     toks = handle_generalization(toks)
 
     dbg(toks)
+
     # handle functions (converting functions into single #FUNC tokens)
     toks = handle_functions(toks)
 
@@ -610,10 +612,12 @@ def handle_generalization(toks:Tokens):
                 scopes[-1][toks[i].original] = toks[i]
                 toks.varnum += 1
 
+                """
                 if toks[i-1] != ".":
                     del toks[i-1]
                     i -= 1
                     n -= 1
+                """
 
         i += 1
 
