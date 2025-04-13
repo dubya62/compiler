@@ -134,6 +134,8 @@ def break_operations_from_function_calls(toks:Tokens):
                         j += len(prepare)
                         k += len(prepare)
 
+                        # TODO: give new_var the correct type
+
                         final_args.append(string_to_token(new_var))
                         toks.varnum += 1
 
@@ -397,11 +399,15 @@ def convert_breaks_continues_and_loops(toks:Tokens):
                 if func[i] == "for":
                     # place the incrementer at the end
                     func.insert_all(end, increment)
+                    end += len(increment)
                     n = len(func)
                     # place the initializer before the label
                     func.insert_all(i-2, initializer)
+                    end += len(initializer)
                     i += len(initializer)
                     n = len(func)
+                # place the jump back to the start at the end
+                func.insert_all(end, strings_to_tokens(["goto", before_label, ";"]))
                 # place the condition inside the if statement
                 func[i] = "if"
                 func.insert_all(i+1, condition)
