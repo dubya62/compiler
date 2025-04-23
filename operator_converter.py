@@ -323,6 +323,9 @@ def convert_assignment_operators(toks:Tokens):
                 insertion = strings_to_tokens(stuff_before + [base] + ["("])
                 func.insert_all(i+1, insertion)
 
+                print("Assignment Operator:")
+                print(insertion)
+
                 n = len(func)
             i += 1
 
@@ -477,7 +480,7 @@ def break_operations(toks):
         "cast":(2, "right"),
         "deref":(2, "right"),
         "ref":(2, "right"),
-        "sizeof":(2, "right"),
+        #"sizeof":(2, "right"),
 
         "*":(3, "left"),
         "/":(3, "left"),
@@ -603,14 +606,19 @@ def break_line(toks, line, operators):
             post_stack.append(x)
         else:
             if len(post_stack) < 2:
+                print("Expression:")
+                print(expression)
+                print("Line:")
+                print(line)
                 x.fatal_error("Invalid operands")
             second = post_stack.pop()
             first = post_stack.pop()
 
             # TODO: INFER TYPE OF INTERMEDIATE RESULT HERE
+            print(x)
             new_var = VariableToken(f"#{toks.varnum}", x.filename, x.line_number, "inter", TypeToken("", "", 0, []))
 
-            addition = [new_var, "=", first, x, second, ";"]
+            addition = [new_var, string_to_token("="), first, x, second, string_to_token(";")]
 
             result.tokens += addition
 

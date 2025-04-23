@@ -124,20 +124,21 @@ def break_operations_from_function_calls(toks:Tokens):
                     final_args = []
                     j = func.get_line_start(i)
                     k = i + 1
-                    for x in splitted:
-                        if len(x) == 0:
-                            func[i].fatal_error("Empty argument found")
-                        new_var = f"#{toks.varnum}"
-                        prepare = strings_to_tokens([new_var, "="]) + x.tokens + strings_to_tokens([";"])
-                        func.insert_all(j, prepare)
-                        n = len(func)
-                        j += len(prepare)
-                        k += len(prepare)
+                    if not (len(splitted) == 1 and len(splitted[0]) == 0):
+                        for x in splitted:
+                            if len(x) == 0:
+                                func[i].fatal_error("Empty argument found")
+                            new_var = f"#{toks.varnum}"
+                            prepare = strings_to_tokens([new_var, "="]) + x.tokens + strings_to_tokens([";"])
+                            func.insert_all(j, prepare)
+                            n = len(func)
+                            j += len(prepare)
+                            k += len(prepare)
 
-                        # TODO: give new_var the correct type
+                            # TODO: give new_var the correct type
 
-                        final_args.append(string_to_token(new_var))
-                        toks.varnum += 1
+                            final_args.append(string_to_token(new_var))
+                            toks.varnum += 1
 
                     dbg("final args")
                     dbg(final_args)

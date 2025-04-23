@@ -128,6 +128,9 @@ def handle_primitive_types(toks:Tokens):
             "double",
             "signed",
             "unsigned",
+            "size_t",
+            "ssize_t",
+            "clock_t"
 
             "__builtin_va_list",
         ])
@@ -437,7 +440,7 @@ def add_extra_scopes(toks:Tokens):
     i = 0
     n = len(toks)
     while i < n:
-        if toks[i] == "for"
+        if toks[i] == "for":
             toks.insert(i, string_to_token("{"))
             n += 1 
             i += 2
@@ -446,7 +449,7 @@ def add_extra_scopes(toks:Tokens):
             end_condition = toks.get_match_end(i, ")")
             if end_condition is None or end_condition + 1 >= n:
                 toks[i].fatal_error("Expected { after loop condition")
-            end_loop = toks.get_line_end(end_condition+1, "}")
+            end_loop = toks.get_match_end(end_condition+1, "}")
             toks.insert(end_loop, string_to_token("}"))
             n += 1
 
