@@ -15,14 +15,14 @@ def convert(toks:Tokens):
     # convert else if(){} into else { if(){} }
     toks = handle_else_if(toks)
 
-    # break operations from if
-    toks = break_operations_from_ifs(toks)
-
     # convert labels
     toks = convert_labels(toks)
     
     # convert breaks, continues, and loops
     toks = convert_breaks_continues_and_loops(toks)
+
+    # break operations from if
+    toks = break_operations_from_ifs(toks)
 
     # TODO: handle array literals
     # TODO: handle compound literals
@@ -242,7 +242,7 @@ def break_operations_from_ifs(toks:Tokens):
                 if content is None:
                     func[i+1].fatal_error("Unmatched (")
 
-                the_variable = VariableToken(f"#{toks.varnum}", func[i].filename, func[i].line_number, "inner_if", TypeToken("#TYPE", func[i].filename, func[i].line_number, [Token("int", "", 0)]))
+                the_variable = VariableToken(f"#{toks.varnum}", "",  0, "inner_if", TypeToken("#TYPE", "", 0, [Token("int", "", 0)]))
                 insertion = strings_to_tokens([the_variable, "="] + content[1:-1] + [";"])
                 insertion2 = strings_to_tokens(["(", the_variable, ")"])
                 func.insert_all(i+1, insertion2)
@@ -410,7 +410,7 @@ def convert_breaks_continues_and_loops(toks:Tokens):
                 # place the jump back to the start at the end
                 func.insert_all(end, strings_to_tokens(["goto", before_label, ";"]))
                 # place the condition inside the if statement
-                func[i] = "if"
+                func[i].token = "if"
                 func.insert_all(i+1, condition)
                 n = len(func)
 

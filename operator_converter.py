@@ -47,6 +47,11 @@ def convert(toks:Tokens):
 
     """
 
+    print("after assignments:")
+    print(toks)
+    print()
+
+
     # convert type casts to use cast
     toks = convert_type_casts(toks)
     """
@@ -62,6 +67,10 @@ def convert(toks:Tokens):
         sizeof,  goto
         #{varnum}, @{labelnum}
     """
+
+    print("after casts:")
+    print(toks)
+    print()
 
     # convert unary operators
     toks = convert_unary_operators(toks)
@@ -100,6 +109,9 @@ def convert(toks:Tokens):
         sizeof,  goto
         #{varnum}, @{labelnum}
     """
+    print("after calls")
+    print(toks)
+    print()
 
     # break operations into 1/line
     toks = break_operations(toks)
@@ -115,6 +127,10 @@ def convert(toks:Tokens):
         sizeof,  goto
         #{varnum}, @{labelnum}
     """
+
+    print("after breaking")
+    print(toks)
+    print()
 
     # remove un+ and un-
     toks = remove_unary_operators(toks)
@@ -343,6 +359,10 @@ def convert_type_casts(toks:Tokens):
         if func is None:
             continue
 
+        castable = set([
+            "(", "{"
+            ])
+
         i = 0
         n = len(func)
         while i < n:
@@ -350,7 +370,7 @@ def convert_type_casts(toks:Tokens):
             # =>
             # #TYPE cast x
             if func[i] == "#TYPE":
-                if i > 0 and func[i-1] == "(" and i + 1 < n and func[i+1] == ")":
+                if i > 0 and func[i-1] == "(" and i + 1 < n and func[i+1] == ")" and (i + 2 < n and (func[i+2] in castable or TOKEN_VARIABLE() == func[i+2])):
                     del func[i-1]
                     i -= 1
                     n -= 1
@@ -411,6 +431,10 @@ def convert_unary_operators(toks:Tokens):
                     func.insert(i, string_to_token("0"))
                     i += 1
                     n += 1
+            elif func[i] == "sizeof":
+                func.insert(i, string_to_token("0"))
+                i += 1
+                n += 1
             i += 1
     return toks
 
@@ -480,7 +504,7 @@ def break_operations(toks):
         "cast":(2, "right"),
         "deref":(2, "right"),
         "ref":(2, "right"),
-        #"sizeof":(2, "right"),
+        "sizeof":(2, "right"),
 
         "*":(3, "left"),
         "/":(3, "left"),
