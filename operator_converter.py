@@ -938,9 +938,9 @@ def remove_lognot(toks:Tokens):
     """
     x = 0 lognot a
     =>
-    #{newvar} = 0
+    #{newvar} = 1
     if (a){
-        #{newvar} = 1
+        #{newvar} = 0
     } else {}
     x = #{newvar}
     """
@@ -959,7 +959,7 @@ def remove_lognot(toks:Tokens):
             if func[i] == "lognot":
                 new_var = VariableToken(f"#{toks.varnum}", "", 0, string_to_token(""), string_to_token(""))
                 original = func[i+1]
-                insertion = [new_var, "=", "0", ";", "if", "(", original, ")", "{", new_var, "=", "1", ";", "}", "else", "{", "}"]
+                insertion = [new_var, "=", "1", ";", "if", "(", original, ")", "{", new_var, "=", "0", ";", "}", "else", "{", "}"]
 
                 del func[i-1]
                 del func[i-1]
