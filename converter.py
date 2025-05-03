@@ -123,6 +123,7 @@ def break_operations_from_function_calls(toks:Tokens):
 
                     final_args = []
                     j = func.get_line_start(i)
+                    return_spot = j
                     k = i + 1
                     if not (len(splitted) == 1 and len(splitted[0]) == 0):
                         for x in splitted:
@@ -148,7 +149,10 @@ def break_operations_from_function_calls(toks:Tokens):
                         l += 2
                     replacement_args = strings_to_tokens(["("] + final_args + [")"])
                     func.insert_all(k, replacement_args)
+                    print("replacement_args")
+                    print(replacement_args)
                     n = len(func)
+                    i = return_spot
             elif func[i][-1:] == "H" and TOKEN_VARIABLE() == func[i][:-1]:
                 func[i].token = func[i][:-1]
 
